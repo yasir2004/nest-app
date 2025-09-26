@@ -1,10 +1,4 @@
-import {
-  IsArray,
-  IsBoolean,
-  IsObject,
-  IsOptional,
-  IsString,
-} from 'class-validator';
+import { IsArray, IsBoolean, IsObject, IsString } from 'class-validator';
 
 export class UpdateCollectionDto {
   @IsString()

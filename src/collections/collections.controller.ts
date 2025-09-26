@@ -50,7 +50,7 @@ export class CollectionsController {
     return col;
   }
 
-  // Save/update collection (already protected)
+  // Save/update collection ( protected)
   @UseGuards(ClerkGuard)
   @Put(':brand_slug/:collection_slug')
   async saveCollection(
