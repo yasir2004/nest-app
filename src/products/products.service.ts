@@ -141,18 +141,4 @@ export class ProductsService {
       .lean()
       .exec();
   }
-
-  // *********** Collection handler functions *************
-
-  async findAll() {
-    return this.productModel.find().exec();
-  }
-
-  async findByBrand(brand: string) {
-    return this.productModel.find({ brand }).exec();
-  }
-
-  async findById(id: string) {
-    return this.productModel.findOne({ product_id: id }).exec();
-  }
 }
