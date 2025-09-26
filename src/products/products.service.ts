@@ -85,7 +85,13 @@ export class ProductsService {
     const brand = await this.authorizeBrand(brand_slug, clerkUserId);
     if (!brand) return { error: 'Unauthorized' };
 
-    return this.productModel.find({ brand_slug, category }).lean().exec();
+    return this.productModel
+      .find({ brand_slug, category })
+      .select(
+        'product_id product_name category product_type is_active updated_at',
+      )
+      .lean()
+      .exec();
   }
 
   async findByBrandAndUser(brand_slug: string, clerkUserId: string) {
@@ -134,5 +140,19 @@ export class ProductsService {
       .findOneAndDelete({ product_id: id, brand_slug })
       .lean()
       .exec();
+  }
+
+  // *********** Collection handler functions *************
+
+  async findAll() {
+    return this.productModel.find().exec();
+  }
+
+  async findByBrand(brand: string) {
+    return this.productModel.find({ brand }).exec();
+  }
+
+  async findById(id: string) {
+    return this.productModel.findOne({ product_id: id }).exec();
   }
 }
