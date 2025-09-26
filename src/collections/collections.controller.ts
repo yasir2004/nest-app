@@ -1,15 +1,23 @@
-import { Body, Controller, Get, Param, Put, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Param,
+  Put,
+  Post,
+  UseGuards,
+  Req,
+} from '@nestjs/common';
 import { CollectionsService } from './collections.service';
 import { UpdateCollectionDto } from './dto/update-collection.dto';
+import { CreateCollectionDto } from './dto/create-collection.dto';
 import { ClerkGuard } from '../auth/clerk.guard';
-
-import { Req } from '@nestjs/common';
 
 @Controller('collections')
 export class CollectionsController {
   constructor(private readonly collectionsService: CollectionsService) {}
 
-  // Get all collections for a brand (protected by ClerkGuard)
+  // Get all collections for a brand (protected)
   @UseGuards(ClerkGuard)
   @Get(':brand_slug')
   async getCollections(
@@ -35,7 +43,7 @@ export class CollectionsController {
   ) {
     const clerkUserId = req.user?.sub || req.user?.user_id;
 
-    // Check if user belongs to brand
+    // Check ownership
     const authorized = await this.collectionsService.findByBrandAndUser(
       brand_slug,
       clerkUserId,
@@ -50,7 +58,23 @@ export class CollectionsController {
     return col;
   }
 
-  // Save/update collection ( protected)
+  // ✅ Create a new collection (protected)
+  @UseGuards(ClerkGuard)
+  @Post()
+  async createCollection(@Body() body: CreateCollectionDto, @Req() req: any) {
+    const clerkUserId = req.user?.sub || req.user?.user_id;
+
+    // enforce ownership of brand
+    const authorized = await this.collectionsService.findByBrandAndUser(
+      body.brand_slug,
+      clerkUserId,
+    );
+    if (!authorized) return { error: 'Unauthorized' };
+
+    return this.collectionsService.create(body);
+  }
+
+  // Update collection (protected)
   @UseGuards(ClerkGuard)
   @Put(':brand_slug/:collection_slug')
   async saveCollection(
@@ -61,7 +85,7 @@ export class CollectionsController {
   ) {
     const clerkUserId = req.user?.sub || req.user?.user_id;
 
-    // Optional: enforce ownership check before update
+    // enforce ownership before update
     const authorized = await this.collectionsService.findByBrandAndUser(
       brand_slug,
       clerkUserId,

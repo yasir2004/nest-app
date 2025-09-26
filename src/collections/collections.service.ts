@@ -5,6 +5,7 @@ import { Model, Connection } from 'mongoose';
 import { Collection, CollectionDocument } from './schemas/collection.schema';
 import { Brand, BrandDocument } from '../brands/schemas/brand.schema';
 import { Product, ProductDocument } from '../products/schemas/product.schema';
+import { CreateCollectionDto } from './dto/create-collection.dto';
 
 @Injectable()
 export class CollectionsService {
@@ -50,6 +51,33 @@ export class CollectionsService {
     // }
 
     return res;
+  }
+
+  async create(payload: CreateCollectionDto) {
+    const now = new Date();
+
+    // check duplicate slug within brand
+    const exists = await this.colModel.findOne({
+      brand_slug: payload.brand_slug,
+      collection_slug: payload.collection_slug,
+    });
+    if (exists) {
+      throw new Error('Collection with this slug already exists');
+    }
+
+    const newCollection = new this.colModel({
+      ...payload,
+      updated_at: now,
+    });
+
+    const saved = await newCollection.save();
+
+    // auto-assign products if rules exist
+    // if (saved.rules) {
+    //   await this.assignProductsByRules(saved.brand_slug, saved.collection_slug);
+    // }
+
+    return saved.toObject();
   }
 
   // **************** Rule-Based Product Assignment ***************************
