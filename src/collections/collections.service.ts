@@ -1,7 +1,7 @@
 // src/collections/collections.service.ts
 import { Injectable } from '@nestjs/common';
-import { InjectModel, InjectConnection } from '@nestjs/mongoose';
-import { Model, Connection } from 'mongoose';
+import { InjectModel } from '@nestjs/mongoose';
+import { Model } from 'mongoose';
 import { Collection, CollectionDocument } from './schemas/collection.schema';
 import { Brand, BrandDocument } from '../brands/schemas/brand.schema';
 import { Product, ProductDocument } from '../products/schemas/product.schema';
@@ -13,7 +13,6 @@ export class CollectionsService {
     @InjectModel(Collection.name) private colModel: Model<CollectionDocument>,
     @InjectModel(Brand.name) private brandModel: Model<BrandDocument>,
     @InjectModel(Product.name) private productModel: Model<ProductDocument>,
-    @InjectConnection() private connection: Connection,
   ) {}
 
   async findByBrandAndUser(brand_slug: string, clerkUserId: string) {
@@ -116,6 +115,42 @@ export class CollectionsService {
     return query;
   }
 
+  private productMatchesRules(product: any, rules: any): boolean {
+    if (!rules) return false;
+
+    const arrayFields = [
+      'gender',
+      'category',
+      'product_type',
+      'occasions',
+      'styles',
+    ];
+
+    for (const field of arrayFields) {
+      if (rules[field]?.length) {
+        if (
+          !product[field] ||
+          !product[field].some((v) => rules[field].includes(v))
+        ) {
+          return false;
+        }
+      }
+    }
+
+    if (rules.attributes) {
+      for (const attr of Object.keys(rules.attributes)) {
+        if (rules.attributes[attr]?.length) {
+          const productVal = product.attributes?.[attr];
+          if (!productVal || !rules.attributes[attr].includes(productVal)) {
+            return false;
+          }
+        }
+      }
+    }
+
+    return true;
+  }
+
   async assignProductsByRules(brand_slug: string, collection_slug: string) {
     const collection = await this.colModel
       .findOne({ brand_slug, collection_slug })
@@ -160,5 +195,50 @@ export class CollectionsService {
     }
 
     return true;
+  }
+
+  // **************** Targeted Refresh on Product Lifecycle *******************
+
+  async handleProductCreatedOrUpdated(product: any) {
+    const collections = await this.colModel
+      .find({ brand_slug: product.brand_slug })
+      .lean();
+
+    for (const col of collections) {
+      if (!col.rules) continue;
+
+      const matches = this.productMatchesRules(product, col.rules);
+      const productIds: string[] = col.product_grid || [];
+
+      if (matches) {
+        if (!productIds.includes(product.product_id)) {
+          // add to front
+          const updated = [product.product_id, ...productIds];
+          await this.colModel.updateOne(
+            { _id: col._id },
+            { $set: { product_grid: updated, updated_at: new Date() } },
+          );
+        }
+      } else {
+        if (productIds.includes(product.product_id)) {
+          // remove it
+          const updated = productIds.filter((id) => id !== product.product_id);
+          await this.colModel.updateOne(
+            { _id: col._id },
+            { $set: { product_grid: updated, updated_at: new Date() } },
+          );
+        }
+      }
+    }
+  }
+
+  async handleProductDeleted(productId: string, brand_slug: string) {
+    await this.colModel.updateMany(
+      { brand_slug, product_grid: productId },
+      {
+        $pull: { product_grid: productId },
+        $set: { updated_at: new Date() },
+      },
+    );
   }
 }

@@ -5,12 +5,14 @@ import { Product, ProductDocument } from './schemas/product.schema';
 import { Brand, BrandDocument } from '../brands/schemas/brand.schema';
 import { CreateProductDto } from './dto/create-product.dto';
 import { UpdateProductDto } from './dto/update-product.dto';
+import { CollectionsService } from '../collections/collections.service';
 
 @Injectable()
 export class ProductsService {
   constructor(
     @InjectModel(Product.name) private productModel: Model<ProductDocument>,
     @InjectModel(Brand.name) private brandModel: Model<BrandDocument>,
+    private readonly collectionsService: CollectionsService,
   ) {}
 
   private async authorizeBrand(brand_slug: string, clerkUserId: string) {
@@ -110,7 +112,13 @@ export class ProductsService {
     if (!brand) return { error: 'Unauthorized' };
 
     const product = new this.productModel({ ...dto, brand_slug });
-    return product.save();
+    const saved = await product.save();
+
+    // trigger targeted refresh on relevant collections
+    await this.collectionsService.handleProductCreatedOrUpdated(
+      saved.toObject(),
+    );
+    return saved.toObject();
   }
 
   async updateForBrand(
@@ -122,7 +130,7 @@ export class ProductsService {
     const brand = await this.authorizeBrand(brand_slug, clerkUserId);
     if (!brand) return { error: 'Unauthorized' };
 
-    return this.productModel
+    const updated = await this.productModel
       .findOneAndUpdate(
         { product_id: id, brand_slug },
         { $set: dto },
@@ -130,15 +138,29 @@ export class ProductsService {
       )
       .lean()
       .exec();
+
+    if (updated) {
+      // trigger targeted refresh
+      await this.collectionsService.handleProductCreatedOrUpdated(updated);
+    }
+
+    return updated;
   }
 
   async removeForBrand(brand_slug: string, id: string, clerkUserId: string) {
     const brand = await this.authorizeBrand(brand_slug, clerkUserId);
     if (!brand) return { error: 'Unauthorized' };
 
-    return this.productModel
+    const deleted = await this.productModel
       .findOneAndDelete({ product_id: id, brand_slug })
       .lean()
       .exec();
+
+    if (deleted) {
+      // trigger cleanup in collections
+      await this.collectionsService.handleProductDeleted(id, brand_slug);
+    }
+
+    return deleted;
   }
 }
